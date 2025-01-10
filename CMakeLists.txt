@@ -47,10 +47,6 @@ set(BUILD_TESTS OFF CACHE BOOL " " FORCE)
 add_subdirectory("$ENV{COMMONLIB_SSE_FOLDER}" ${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build)
 get_target_property(COMMONLIB_SRC_DIR CommonLibSSE SOURCE_DIR)
 
-find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
-find_path(SKSE_MCP_INCLUDE_DIRS "SKSEMCP/utils.hpp")
-
-
 #YAML-CPP
 FetchContent_Declare(
   yaml-cpp
@@ -90,8 +86,6 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE include/PCH.h) # <--- PCH.h is
 target_include_directories(
 	${PROJECT_NAME}
 	PRIVATE
-	${CLIB_UTIL_INCLUDE_DIRS}
-    ${SKSE_MCP_INCLUDE_DIRS}
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
