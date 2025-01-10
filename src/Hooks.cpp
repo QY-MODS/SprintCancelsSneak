@@ -24,11 +24,6 @@ void Hooks::Install()
 	ControlsChangedHook::InstallHook(RE::VTABLE_Journal_SystemTab[1]);
 }
 
-void Hooks::PlayerInputHandlerHook<RE::SneakHandler>::ProcessButton_Hook(RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data) {
-
-    ProcessButton(this, a_event, a_data);
-};
-
 void Hooks::PlayerInputHandlerHook<RE::SprintHandler>::ProcessButton_Hook(RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
 {
 	if (!a_event) return ProcessButton(this, a_event, a_data);
@@ -49,7 +44,7 @@ void Hooks::PlayerInputHandlerHook<RE::SprintHandler>::ProcessButton_Hook(RE::Bu
 	if (player->IsSneaking()) {
 	    const auto end_time = std::chrono::high_resolution_clock::now();
 	    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - sprint_held_start_time.value());
-	    if (duration.count()>200 && !player->AsActorState()->IsSprinting()) {
+	    if (duration.count()>50 && !player->AsActorState()->IsSprinting()) {
 		    logger::trace("Sending sneak event");
             if (const auto device = a_event->GetDevice(); sneak_events.contains(device)) {
 				sprint_held_start_time.reset();
@@ -63,16 +58,17 @@ void Hooks::PlayerInputHandlerHook<RE::SprintHandler>::ProcessButton_Hook(RE::Bu
 	ProcessButton(this, a_event, a_data);
 
 }
-template <typename Handler>
-void Hooks::PlayerInputHandlerHook<Handler>::InstallHook(const REL::VariantID& varID) {
-	REL::Relocation vTable(varID);
-    ProcessButton = vTable.write_vfunc(0x4, &Hooks::PlayerInputHandlerHook<Handler>::ProcessButton_Hook);
-}
 
 RE::BSEventNotifyControl Hooks::ControlsChangedHook::ProcessEvent_Hook(const RE::BSGamerProfileEvent* a_event, RE::BSTEventSource<RE::BSGamerProfileEvent>* a_eventSource)
 {
 	UpdateSneakEvents();
 	return ProcessEvent(this, a_event, a_eventSource);
+}
+
+template <typename Handler>
+void Hooks::PlayerInputHandlerHook<Handler>::InstallHook(const REL::VariantID& varID) {
+	REL::Relocation vTable(varID);
+    ProcessButton = vTable.write_vfunc(0x4, &Hooks::PlayerInputHandlerHook<Handler>::ProcessButton_Hook);
 }
 
 void Hooks::ControlsChangedHook::InstallHook(const REL::VariantID& varID)
