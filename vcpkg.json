@@ -1,20 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "name": "sprintcancelssneak",
-  "version-string": "0.1.0.0",
+  "name": "sprint-cancels-sneak",
+  "version-string": "1.0.0.0",
   "dependencies": [
-    "rapidjson",
     "fast-cpp-csv-parser",
     "rsm-binary-io",
-    "simpleini",
     "spdlog",
-    "xbyak",
-    "rapidcsv",
-    "directxmath",
-    "directxtk",
-    "boost-stl-interfaces",
-    "clib-util",
-    "skse-mcp"
+    "rapidcsv"
   ],
   "overrides": [
     {

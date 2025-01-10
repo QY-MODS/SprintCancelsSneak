@@ -71,7 +71,6 @@ void Hooks::PlayerInputHandlerHook<Handler>::InstallHook(const REL::VariantID& v
 
 RE::BSEventNotifyControl Hooks::ControlsChangedHook::ProcessEvent_Hook(const RE::BSGamerProfileEvent* a_event, RE::BSTEventSource<RE::BSGamerProfileEvent>* a_eventSource)
 {
-	logger::info("ControlsChangedHook::ProcessEvent_Hook");
 	UpdateSneakEvents();
 	return ProcessEvent(this, a_event, a_eventSource);
 }
