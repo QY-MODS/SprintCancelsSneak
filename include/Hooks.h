@@ -5,19 +5,14 @@ namespace Hooks {
 	void Install();
 
 	inline std::map<RE::INPUT_DEVICE, RE::ButtonEvent*> sneak_events;
-	inline std::optional<std::chrono::high_resolution_clock::time_point> sprint_held_start_time;
+	inline std::map<RE::INPUT_DEVICE, RE::ButtonEvent*> sprint_events;
 
-	template <typename Handler>
-    class PlayerInputHandlerHook : public Handler {
-        using ProcessButton_t = decltype(&Handler::ProcessButton);
-    public:
-        static inline REL::Relocation<ProcessButton_t> ProcessButton;
-        void ProcessButton_Hook(RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data);
-        static void InstallHook(const REL::VariantID& varID);
-    };
+    constexpr auto sprint_held_threshold_s = 250.f / 1000.0f;
 
+    RE::ButtonEvent* CreateButtonEvent(RE::INPUT_DEVICE a_device, RE::BSFixedString& user_event);
     RE::ButtonEvent* CreateSneakEvent(RE::INPUT_DEVICE a_device);
-    void UpdateSneakEvents();
+    RE::ButtonEvent* CreateSprintEvent(RE::INPUT_DEVICE a_device);
+    void UpdateSneakSprintEvents();
 
     class ControlsChangedHook : public RE::Journal_SystemTab {
         using ProcessMessage_t = RE::BSEventNotifyControl(RE::Journal_SystemTab::*)(const RE::BSGamerProfileEvent*, RE::BSTEventSource<RE::BSGamerProfileEvent>*);
@@ -26,5 +21,12 @@ namespace Hooks {
     public:
         static void InstallHook(const REL::VariantID& varID);
     };
+
+    struct InputHook {
+	    static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent* const* a_event);
+	    static inline REL::Relocation<decltype(thunk)> func;
+	    static bool ProcessInput(RE::InputEvent* event);
+        static void InstallHook(SKSE::Trampoline& a_trampoline);
+	};
 
 };

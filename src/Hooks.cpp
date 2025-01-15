@@ -1,78 +1,133 @@
 #include "Hooks.h"
 
-RE::ButtonEvent* Hooks::CreateSneakEvent(const RE::INPUT_DEVICE a_device) {
+RE::ButtonEvent* Hooks::CreateButtonEvent(RE::INPUT_DEVICE a_device, RE::BSFixedString& user_event)
+{
 	const auto control_map = RE::ControlMap::GetSingleton();
-	const auto user_events = RE::UserEvents::GetSingleton();
-	const auto key = control_map->GetMappedKey(user_events->sneak,a_device);
-	auto sneak_event = RE::ButtonEvent::Create(a_device,user_events->sneak,key,1.f,0.f);
-	if (!sneak_event) logger::error("Failed to create sneak_event");
-	return sneak_event;
+	const auto key = control_map->GetMappedKey(user_event, a_device);
+	const auto button_event = RE::ButtonEvent::Create(a_device, user_event, key, 1.f, 0.f);
+	if (!button_event) logger::error("Failed to create button_event");
+	return button_event;
 }
 
-void Hooks::UpdateSneakEvents()
+RE::ButtonEvent* Hooks::CreateSneakEvent(const RE::INPUT_DEVICE a_device) {
+	return CreateButtonEvent(a_device, RE::UserEvents::GetSingleton()->sneak);
+}
+
+RE::ButtonEvent* Hooks::CreateSprintEvent(RE::INPUT_DEVICE a_device)
+{
+	return CreateButtonEvent(a_device, RE::UserEvents::GetSingleton()->sprint);
+}
+
+void Hooks::UpdateSneakSprintEvents()
 {
 	const auto control_map = RE::ControlMap::GetSingleton();
 	const auto user_events = RE::UserEvents::GetSingleton();
 	for (auto& [device, event] : sneak_events) {
 		event->idCode = control_map->GetMappedKey(user_events->sneak,device);
 	}
+
+	for (auto& [device, event] : sprint_events) {
+		event->idCode = control_map->GetMappedKey(user_events->sprint, device);
+	}
 }
 
 void Hooks::Install()
 {
-	PlayerInputHandlerHook<RE::SprintHandler>::InstallHook(RE::VTABLE_SprintHandler[0]);
 	ControlsChangedHook::InstallHook(RE::VTABLE_Journal_SystemTab[1]);
-}
 
-void Hooks::PlayerInputHandlerHook<RE::SprintHandler>::ProcessButton_Hook(RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
-{
-	if (!a_event) return ProcessButton(this, a_event, a_data);
-	const auto player = RE::PlayerCharacter::GetSingleton();
-	if (a_event->IsUp() || !player->IsMoving()) {
-		sprint_held_start_time.reset();
-		ProcessButton(this, a_event, a_data);
-		return;
-	}
-
-	if (a_event->IsDown()) {
-		sprint_held_start_time.emplace(std::chrono::high_resolution_clock::now());
-	}
-	if (!sprint_held_start_time.has_value()) {
-		ProcessButton(this, a_event, a_data);
-		return;
-	}
-	if (player->IsSneaking()) {
-	    const auto end_time = std::chrono::high_resolution_clock::now();
-	    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - sprint_held_start_time.value());
-	    if (duration.count()>50 && !player->AsActorState()->IsSprinting()) {
-		    logger::trace("Sending sneak event");
-            if (const auto device = a_event->GetDevice(); sneak_events.contains(device)) {
-				sprint_held_start_time.reset();
-		        const auto player_controls = RE::PlayerControls::GetSingleton();
-		        const auto sneak_event = sneak_events.at(device);
-		        player_controls->sneakHandler->ProcessButton(sneak_event,a_data);
-			    return this->ProcessButton_Hook(a_event,a_data);
-		    }
-	    }
-	}
-	ProcessButton(this, a_event, a_data);
-
+	auto& trampoline = SKSE::GetTrampoline();
+	constexpr size_t size_per_hook = 14;
+	SKSE::AllocTrampoline(1 * size_per_hook);
+	InputHook::InstallHook(trampoline);
 }
 
 RE::BSEventNotifyControl Hooks::ControlsChangedHook::ProcessEvent_Hook(const RE::BSGamerProfileEvent* a_event, RE::BSTEventSource<RE::BSGamerProfileEvent>* a_eventSource)
 {
-	UpdateSneakEvents();
+	UpdateSneakSprintEvents();
 	return ProcessEvent(this, a_event, a_eventSource);
-}
-
-template <typename Handler>
-void Hooks::PlayerInputHandlerHook<Handler>::InstallHook(const REL::VariantID& varID) {
-	REL::Relocation vTable(varID);
-    ProcessButton = vTable.write_vfunc(0x4, &Hooks::PlayerInputHandlerHook<Handler>::ProcessButton_Hook);
 }
 
 void Hooks::ControlsChangedHook::InstallHook(const REL::VariantID& varID)
 {
 	REL::Relocation vTable(varID);
 	ProcessEvent = vTable.write_vfunc(0x1, &Hooks::ControlsChangedHook::ProcessEvent_Hook);
+}
+
+void Hooks::InputHook::thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent* const* a_event)
+{
+	if (!a_dispatcher || !a_event) {
+		return func(a_dispatcher, a_event);
+	}
+
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player->IsMoving() || !player->IsSneaking()) {
+		return func(a_dispatcher, a_event);
+	}
+
+    auto first = *a_event;
+    auto last = *a_event;
+    size_t length = 0;
+
+    for (auto current = *a_event; current; current = current->next) {
+        if (ProcessInput(current)) {
+            if (current != last) {
+                last->next = current->next;
+            } else {
+                last = current->next;
+                first = current->next;
+            }
+        } else {
+            last = current;
+            ++length;
+        }
+    }
+
+    if (length == 0) {
+        constexpr RE::InputEvent* const dummy[] = {nullptr};
+        func(a_dispatcher, dummy);
+    } else {
+        RE::InputEvent* const e[] = {first};
+        func(a_dispatcher, e);
+    }
+}
+
+bool Hooks::InputHook::ProcessInput(RE::InputEvent* event)
+{
+	bool block = false;
+	if (auto button_event = event->AsButtonEvent()) {
+		if (button_event->userEvent == RE::UserEvents::GetSingleton()->sprint) {
+			block = true;
+		    if (!button_event->IsUp()){
+				if (button_event->HeldDuration() >= sprint_held_threshold_s) {
+				    if (const auto device = event->GetDevice(); sneak_events.contains(device)) {
+		                const auto player_controls = RE::PlayerControls::GetSingleton();
+		                const auto sneak_event = sneak_events.at(device);
+		                player_controls->sneakHandler->ProcessButton(sneak_event,&player_controls->data);
+						if (sprint_events.contains(device)) {
+				            player_controls->sprintHandler->ProcessButton(sprint_events.at(device), &player_controls->data);
+						}
+				    }
+				}
+		    }
+			else if (!RE::PlayerCharacter::GetSingleton()->AsActorState()->IsSprinting()) {
+                if (const auto device = event->GetDevice(); sprint_events.contains(device)) {
+				    const auto player_controls = RE::PlayerControls::GetSingleton();
+				    const auto sprint_event = sprint_events.at(device);
+				    player_controls->sprintHandler->ProcessButton(sprint_event, &player_controls->data);
+					SKSE::GetTaskInterface()->AddTask([button_event]() {
+				        const auto player_controls = RE::PlayerControls::GetSingleton();
+				        player_controls->sprintHandler->ProcessButton(button_event, &player_controls->data);
+					});
+
+                }
+			}
+		}
+	}
+	return block;
+}
+
+void Hooks::InputHook::InstallHook(SKSE::Trampoline& a_trampoline)
+{
+	const REL::Relocation<std::uintptr_t> target{REL::RelocationID(67315, 68617)};
+    InputHook::func = a_trampoline.write_call<5>(target.address() + 0x7B, InputHook::thunk);
 }
