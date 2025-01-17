@@ -9,7 +9,7 @@ namespace Hooks {
 
     constexpr auto sprint_held_threshold_s = 250.f / 1000.0f;
 
-    RE::ButtonEvent* CreateButtonEvent(RE::INPUT_DEVICE a_device, RE::BSFixedString& user_event);
+    RE::ButtonEvent* CreateButtonEvent(RE::INPUT_DEVICE a_device, const RE::BSFixedString& user_event);
     RE::ButtonEvent* CreateSneakEvent(RE::INPUT_DEVICE a_device);
     RE::ButtonEvent* CreateSprintEvent(RE::INPUT_DEVICE a_device);
     void UpdateSneakSprintEvents();
@@ -27,6 +27,7 @@ namespace Hooks {
 	    static inline REL::Relocation<decltype(thunk)> func;
 	    static bool ProcessInput(RE::InputEvent* event);
         static void InstallHook(SKSE::Trampoline& a_trampoline);
+        static void GetUp(const RE::InputEvent* event);
 	};
 
 };

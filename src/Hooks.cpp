@@ -1,6 +1,8 @@
 #include "Hooks.h"
 
-RE::ButtonEvent* Hooks::CreateButtonEvent(RE::INPUT_DEVICE a_device, RE::BSFixedString& user_event)
+#include "Settings.h"
+
+RE::ButtonEvent* Hooks::CreateButtonEvent(RE::INPUT_DEVICE a_device, const RE::BSFixedString& user_event)
 {
 	const auto control_map = RE::ControlMap::GetSingleton();
 	const auto key = control_map->GetMappedKey(user_event, a_device);
@@ -22,13 +24,13 @@ void Hooks::UpdateSneakSprintEvents()
 {
 	const auto control_map = RE::ControlMap::GetSingleton();
 	const auto user_events = RE::UserEvents::GetSingleton();
+	for (auto& [device, event] : sprint_events) {
+		event->idCode = control_map->GetMappedKey(user_events->sprint, device);
+	}
 	for (auto& [device, event] : sneak_events) {
 		event->idCode = control_map->GetMappedKey(user_events->sneak,device);
 	}
 
-	for (auto& [device, event] : sprint_events) {
-		event->idCode = control_map->GetMappedKey(user_events->sprint, device);
-	}
 }
 
 void Hooks::Install()
@@ -99,14 +101,7 @@ bool Hooks::InputHook::ProcessInput(RE::InputEvent* event)
 			block = true;
 		    if (!button_event->IsUp()){
 				if (button_event->HeldDuration() >= sprint_held_threshold_s) {
-				    if (const auto device = event->GetDevice(); sneak_events.contains(device)) {
-		                const auto player_controls = RE::PlayerControls::GetSingleton();
-		                const auto sneak_event = sneak_events.at(device);
-		                player_controls->sneakHandler->ProcessButton(sneak_event,&player_controls->data);
-						if (sprint_events.contains(device)) {
-				            player_controls->sprintHandler->ProcessButton(sprint_events.at(device), &player_controls->data);
-						}
-				    }
+					GetUp(event);
 				}
 		    }
 			else if (!RE::PlayerCharacter::GetSingleton()->AsActorState()->IsSprinting()) {
@@ -131,3 +126,20 @@ void Hooks::InputHook::InstallHook(SKSE::Trampoline& a_trampoline)
 	const REL::Relocation<std::uintptr_t> target{REL::RelocationID(67315, 68617)};
     InputHook::func = a_trampoline.write_call<5>(target.address() + 0x7B, InputHook::thunk);
 }
+
+void Hooks::InputHook::GetUp(const RE::InputEvent* event)
+{
+	if (ModCompatibility::TUDM::is_installed) {
+        ModCompatibility::TUDM::StopSneak();
+		return;
+	}
+	if (const auto device = event->GetDevice(); sneak_events.contains(device)) {
+		const auto player_controls = RE::PlayerControls::GetSingleton();
+		const auto sneak_event = sneak_events.at(device);
+		player_controls->sneakHandler->ProcessButton(sneak_event,&player_controls->data);
+		if (sprint_events.contains(device)) {
+			player_controls->sprintHandler->ProcessButton(sprint_events.at(device), &player_controls->data);
+		}
+	}
+}
+
